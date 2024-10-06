@@ -34,9 +34,6 @@ jobs:
     - name: Install dependencies
       run: npm ci --include=dev
 
-    - name: Generate data
-      run: npm run generate-data
-
     - name: Build app
       run: npm run build
 
