@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
-import DeckGL from 'deck.gl';
-import Map, { NavigationControl } from 'react-map-gl/maplibre';
+import { MapboxOverlay as DeckOverlay, MapboxOverlayProps } from '@deck.gl/mapbox';
+import Map, { NavigationControl, useControl } from 'react-map-gl/maplibre';
 import {
   EditableGeoJsonLayer,
   DrawPointMode,
@@ -14,6 +14,14 @@ import {
   ClickEvent,
   PointerMoveEvent,
 } from '@deck.gl-community/editable-layers';
+
+import 'maplibre-gl/dist/maplibre-gl.css';
+
+function DeckGLOverlay(props: React.PropsWithChildren<MapboxOverlayProps>) {
+  const overlay = useControl(() => new DeckOverlay(props));
+  overlay.setProps(props);
+  return props.children;
+}
 
 class ConnectPointsMode extends GeoJsonEditMode {
   firstPick: Pick | null = null;
@@ -121,47 +129,41 @@ function App() {
   const mapStyleUrl = 'https://demotiles.maplibre.org/style.json';
 
   return (
-    <>
-      <DeckGL
-        initialViewState={{
-          latitude: location.latitude,
-          longitude: location.longitude,
-          zoom,
-        }}
-        controller={{
-          doubleClickZoom: false,
-        }}
+    <Map
+      initialViewState={{
+        latitude: location.latitude,
+        longitude: location.longitude,
+        zoom,
+      }}
+      mapStyle={mapStyleUrl}
+    >
+      <NavigationControl position="top-left" />
+      <DeckGLOverlay
+        interleaved
         layers={[layer]}
         getCursor={(event) => layer.getCursor({ isDragging: event.isDragging }) ?? 'default'}
       >
-        <Map
-          mapStyle={mapStyleUrl}
-          hash
+        <div style={{
+          position: 'absolute', top: 0, right: 0, color: 'white',
+        }}
         >
-          <NavigationControl />
-        </Map>
-      </DeckGL>
-
-      <div style={{
-        position: 'absolute', top: 0, right: 0, color: 'white',
-      }}
-      >
-        <button
-          type="button"
-          disabled={mode === DrawPointMode}
-          onClick={() => setMode(() => DrawPointMode)}
-        >
-          Add Points
-        </button>
-        <button
-          type="button"
-          disabled={mode === ConnectPointsMode}
-          onClick={() => setMode(() => ConnectPointsMode)}
-        >
-          Connect Points
-        </button>
-      </div>
-    </>
+          <button
+            type="button"
+            disabled={mode === DrawPointMode}
+            onClick={() => setMode(() => DrawPointMode)}
+          >
+            Add Points
+          </button>
+          <button
+            type="button"
+            disabled={mode === ConnectPointsMode}
+            onClick={() => setMode(() => ConnectPointsMode)}
+          >
+            Connect Points
+          </button>
+        </div>
+      </DeckGLOverlay>
+    </Map>
   );
 }
 
