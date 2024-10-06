@@ -1,24 +1,109 @@
 import { useState } from 'react';
 
 import DeckGL from 'deck.gl';
-import Map, { Marker, NavigationControl } from 'react-map-gl/maplibre';
+import Map, { NavigationControl } from 'react-map-gl/maplibre';
 import {
   EditableGeoJsonLayer,
-  DrawLineStringMode,
+  DrawPointMode,
+  GeoJsonEditMode,
   FeatureCollection,
+  GuideFeatureCollection,
+  Geometry,
+  ModeProps,
+  Pick,
+  ClickEvent,
+  PointerMoveEvent,
 } from '@deck.gl-community/editable-layers';
+
+class ConnectPointsMode extends GeoJsonEditMode {
+  firstPick: Pick | null = null;
+
+  handleClick({ picks }: ClickEvent, { onEdit, data }: ModeProps<FeatureCollection>) {
+    if (picks.length > 0) {
+      // find the first point picked
+      const selectedPick = picks.find((pick) => pick?.object?.geometry?.type === 'Point');
+      if (selectedPick && !this.firstPick) {
+        this.firstPick = selectedPick ?? null;
+      } else if (selectedPick && this.firstPick?.object) {
+        const geometry = {
+          type: 'LineString',
+          coordinates: [
+            this.firstPick?.object?.geometry?.coordinates,
+            selectedPick?.object?.geometry?.coordinates,
+          ],
+        } as Geometry;
+        this.firstPick = null;
+        onEdit(this.getAddFeatureAction(geometry, data));
+      }
+    }
+  }
+
+  handlePointerMove({ picks }: PointerMoveEvent, { onUpdateCursor }: ModeProps<FeatureCollection>) {
+    if (picks.find((pick) => pick?.object?.geometry?.type === 'Point')) {
+      onUpdateCursor('cell');
+    } else {
+      onUpdateCursor(null);
+    }
+  }
+
+  getGuides({ lastPointerMoveEvent }: ModeProps<FeatureCollection>): GuideFeatureCollection {
+    if (!this.firstPick || !lastPointerMoveEvent) {
+      return {
+        type: 'FeatureCollection',
+        features: [],
+      };
+    }
+
+    return {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: {
+            guideType: 'tentative',
+          },
+          geometry: {
+            type: 'LineString',
+
+            coordinates: [
+              this.firstPick?.object?.geometry?.coordinates,
+              lastPointerMoveEvent.mapCoords,
+            ],
+          },
+        },
+      ],
+    };
+  }
+}
 
 function App() {
   const [data, setData] = useState<FeatureCollection>({
     type: 'FeatureCollection',
-    features: [],
+    features: [
+      {
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'Point',
+          coordinates: [-0.1, 51.5],
+        },
+      },
+      {
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'Point',
+          coordinates: [2.3, 48.9],
+        },
+      },
+    ],
   });
   const [selectedFeatureIndexes] = useState([]);
+  const [mode, setMode] = useState<typeof DrawPointMode | typeof ConnectPointsMode>(() => ConnectPointsMode);
 
   const layer = new EditableGeoJsonLayer({
     data,
-    mode: DrawLineStringMode,
-    modeConfig: { formatTooltip: () => null },
+    mode,
     selectedFeatureIndexes,
     onEdit: ({ updatedData }: { updatedData: FeatureCollection }) => {
       setData(updatedData);
@@ -36,30 +121,47 @@ function App() {
   const mapStyleUrl = 'https://demotiles.maplibre.org/style.json';
 
   return (
-    <DeckGL
-      initialViewState={{
-        latitude: location.latitude,
-        longitude: location.longitude,
-        zoom,
-      }}
-      controller={{
-        doubleClickZoom: false,
-      }}
-      layers={[layer]}
-      getCursor={(event) => layer.getCursor({ isDragging: event.isDragging }) ?? 'default'}
-    >
-      <Map
-        mapStyle={mapStyleUrl}
-        hash
+    <>
+      <DeckGL
+        initialViewState={{
+          latitude: location.latitude,
+          longitude: location.longitude,
+          zoom,
+        }}
+        controller={{
+          doubleClickZoom: false,
+        }}
+        layers={[layer]}
+        getCursor={(event) => layer.getCursor({ isDragging: event.isDragging }) ?? 'default'}
       >
-        <NavigationControl />
-        <Marker
-          latitude={location.latitude}
-          longitude={location.longitude}
-          color="red"
-        />
-      </Map>
-    </DeckGL>
+        <Map
+          mapStyle={mapStyleUrl}
+          hash
+        >
+          <NavigationControl />
+        </Map>
+      </DeckGL>
+
+      <div style={{
+        position: 'absolute', top: 0, right: 0, color: 'white',
+      }}
+      >
+        <button
+          type="button"
+          disabled={mode === DrawPointMode}
+          onClick={() => setMode(() => DrawPointMode)}
+        >
+          Add Points
+        </button>
+        <button
+          type="button"
+          disabled={mode === ConnectPointsMode}
+          onClick={() => setMode(() => ConnectPointsMode)}
+        >
+          Connect Points
+        </button>
+      </div>
+    </>
   );
 }
 
